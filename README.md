@@ -5,7 +5,7 @@ This project implements an integrated monitoring and communication architecture 
 The system includes multiple communication interfaces (CANOpen, Ethernet, LVDS/Optical) and ensures safe, reliable operation through sensor health checks, watchdogs, and heartbeat mechanisms.
 
 **System Architecture**
-
+Refer architecture.png
 
 
 **Features**
@@ -20,7 +20,7 @@ Safety Layer Manager (SLM) integration
 
 Heartbeat monitoring & logs management
 
-Live map and status 
+Live map and connectivity status 
 
 Cloud connectivity for continuous data streaming
 
