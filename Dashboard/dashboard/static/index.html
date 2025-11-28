@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>🤖 AI-nonymous Dashboard</title>
+    <style>
+        body {
+            font-family: "Segoe UI", Arial, sans-serif;
+            padding: 20px;
+            background: linear-gradient(135deg, #dfe9f3, #ffffff);
+            margin: 0;
+        }
+
+        /* --- TOP NAV BAR --- */
+        .top-nav {
+            width: 100%;
+            padding: 15px 25px;
+            background: rgba(255,255,255,0.6);
+            backdrop-filter: blur(10px);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-radius: 0 0 14px 14px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .nav-title { font-size: 22px; font-weight: 700; color: #222; }
+
+        .nav-button {
+            background: linear-gradient(135deg, #3b82f6, #06b6d4);
+            padding: 10px 18px; color: white; border-radius: 10px; font-size: 15px; font-weight: 600;
+            text-decoration: none; box-shadow: 0 0 10px rgba(0,200,255,0.4); transition: 0.2s ease;
+        }
+        .nav-button:hover { transform: scale(1.05); box-shadow: 0 0 16px rgba(0,200,255,0.7); }
+
+        h1 { color: #222; text-align: center; font-size: 32px; margin-bottom: 25px; margin-top: 15px; letter-spacing: 1px; }
+
+        .container { max-width: 950px; margin: 0 auto; }
+
+        .card { background: #fff; padding: 20px; margin-bottom: 22px; border-radius: 14px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); transition: 0.25s ease; }
+        .card:hover { box-shadow: 0 6px 22px rgba(0,0,0,0.12); transform: translateY(-2px); }
+
+        .robot-info p { margin: 6px 0; font-size: 16px; }
+        .robot-info span { font-weight: bold; color: #222; }
+
+        /* 💡 NEW: E-STOP Status Classes for Visual Feedback */
+        .status-estop-active { color: #ff3b3b; font-weight: bold; }
+        .status-estop-clear { color: #16a34a; font-weight: bold; }
+
+        button { margin: 6px; padding: 12px 18px; border: none; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: 600; transition: 0.2s ease; }
+        button:hover { opacity: 0.85; transform: scale(1.03); } button:active { transform: scale(0.98); }
+
+        .estop { background: #ff3b3b; color: #fff; } .clear-estop { background: #16a34a; color: #fff; }
+        .motion-btn { background: #3b82f6; color: #fff; } .stop-btn { background: #eab308; color: #000; }
+        .led-on { background: #22c55e; color: #fff; } .led-off { background: #6b7280; color: #fff; }
+
+        pre { max-height: 350px; overflow-y: auto; background: #111; color: #00ff9d; padding: 15px; border-radius: 8px; font-size: 14px; line-height: 1.4; }
+
+        .section-title { font-size: 20px; margin-bottom: 12px; font-weight: 600; color: #303030; }
+
+        /* Small interface/status cards */
+        .iface-row { display:flex; gap:8px; margin-top:12px; }
+        .iface { flex:1; background: #f7fafc; border-radius:8px; padding:8px; text-align:center; }
+        .iface strong { display:block; font-size:18px; color:#111; }
+        .heartbeat { display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:12px; background:#111827; color:#fff; }
+        .small-note { font-size:12px; color:#555; margin-top:6px; }
+    </style>
+</head>
+
+<body>
+
+<div class="top-nav">
+    <div class="nav-title">🤖 AI-nonymous Control Dashboard</div>
+    <a href="/advanced" class="nav-button">📊 Advanced Graphs</a>
+</div>
+
+<div class="container">
+    <h1>Robot Dashboard</h1>
+
+    <div class="card robot-info">
+        <div class="section-title">Robot Status</div>
+        <p><strong>Robot:</strong> <span id="robot-id">robot-alpha</span></p>
+        <p><strong>Battery:</strong> <span id="battery">--%</span></p>
+        <p><strong>Temperature:</strong> <span id="temperature">-- °C</span></p>
+        <p><strong>Position:</strong> <span id="position">x=0, y=0, θ=0</span></p>
+        <p><strong>LED:</strong> <span id="led-status">OFF</span></p>
+        <p><strong>E-STOP:</strong> <span id="estop-status" class="status-estop-clear">CLEAR</span></p>
+
+        <div class="iface-row">
+            <div class="iface">
+                <div class="small-note">P2 (sum)</div>
+                <strong id="p2_status">--</strong>
+            </div>
+            <div class="iface">
+                <div class="small-note">P3 (sum)</div>
+                <strong id="p3_status">--</strong>
+            </div>
+            <div class="iface">
+                <div class="small-note">P4 (sum)</div>
+                <strong id="p4_status">--</strong>
+            </div>
+        </div>
+
+        <div style="margin-top:12px;">
+            <span class="heartbeat" id="heartbeat_indicator">⏱ Last HB: --</span>
+        </div>
+    </div>
+
+    <div class="card controls">
+        <div class="section-title">Controls</div>
+
+        <button class="estop" onclick="sendEStop()">🛑 E-STOP</button>
+        <button class="clear-estop" onclick="sendClear()">✔ Clear E-STOP</button>
+        <br><br>
+
+        <button class="motion-btn" onclick="sendMove('forward')">⬆ Forward</button>
+        <button class="motion-btn" onclick="sendMove('left')">⬅ Left</button>
+        <button class="motion-btn" onclick="sendMove('right')">➡ Right</button>
+        <button class="motion-btn" onclick="sendMove('back')">⬇ Back</button>
+        <button class="stop-btn" onclick="sendStop()">⛔ STOP</button>
+        <br><br>
+
+        <button class="led-on" onclick="sendLED('on')">💡 LED ON</button>
+        <button class="led-off" onclick="sendLED('off')">LED OFF</button>
+    </div>
+
+    <div class="card logs">
+        <div class="section-title">Logs / Telemetry</div>
+        <pre id="logs"></pre>
+    </div>
+
+</div>
+
+<script>
+const robotId = document.getElementById("robot-id").innerText;
+const logsEl = document.getElementById("logs");
+const estopStatusEl = document.getElementById("estop-status"); // 💡 Get E-STOP element
+
+function appendLog(msg) {
+    logsEl.textContent += msg + "\n";
+    logsEl.scrollTop = logsEl.scrollHeight;
+}
+
+// 💡 NEW/MODIFIED: Helper to update E-STOP status style and text
+function updateEStopDisplay(isActive) {
+    if (isActive) {
+        estopStatusEl.innerText = "ACTIVE";
+        estopStatusEl.className = "status-estop-active";
+    } else {
+        estopStatusEl.innerText = "CLEAR";
+        estopStatusEl.className = "status-estop-clear";
+    }
+}
+
+async function sendCommand(payload) {
+    payload.robot_id = robotId;
+    try {
+        await fetch("/api/command", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        
+        // 💡 NEW: Instant UI feedback after sending command
+        if (payload.action === "E_STOP") {
+            updateEStopDisplay(true);
+        } else if (payload.action === "CLEAR_ESTOP") {
+            updateEStopDisplay(false);
+        }
+
+    } catch (err) {
+        console.error("Failed to send command:", err);
+    }
+}
+
+// 💡 MODIFIED: Command functions remain the same
+function sendEStop() { sendCommand({ type: "safety", action: "E_STOP" }); }
+function sendClear() { sendCommand({ type: "safety", action: "CLEAR_ESTOP" }); }
+function sendMove(direction) { sendCommand({ action: "move", direction: direction }); }
+function sendStop() { sendCommand({ action: "stop" }); }
+function sendLED(state) { sendCommand({ action: `led/${state}` }); }
+
+// --------------- WebSocket ----------------
+let wsProtocol = location.protocol === "https:" ? "wss" : "ws";
+let ws = new WebSocket(`${wsProtocol}://${location.host}/ws/telemetry`);
+
+ws.onopen = () => appendLog("🟢 WebSocket connected");
+ws.onclose = () => appendLog("🔴 WebSocket disconnected");
+ws.onerror = (e) => appendLog("⚠️ WebSocket error: " + e);
+
+ws.onmessage = (event) => {
+    let data;
+    try { data = JSON.parse(event.data); } catch { data = { raw: event.data }; }
+
+    // Telemetry update
+    if (data.type === "telemetry") {
+        document.getElementById("battery").innerText = (data.battery_pct ?? data.battery) + "%";
+        document.getElementById("temperature").innerText = (data.temperature_c ?? data.temperature) + " °C";
+        document.getElementById("position").innerText =
+            `x=${data.position.x}, y=${data.position.y}, θ=${data.position.theta}`;
+        document.getElementById("led-status").innerText = data.led ? "ON" : "OFF";
+        
+        // 💡 NEW: Update E-STOP status from Telemetry (the ultimate source of truth)
+        if (data.estop !== undefined) {
+             updateEStopDisplay(data.estop);
+        }
+
+        // Interfaces (if present)
+        if (data.interfaces) {
+            const p2 = data.interfaces.P2 || data.interfaces.p2 || {};
+            const p3 = data.interfaces.P3 || data.interfaces.p3 || {};
+            const p4 = data.interfaces.P4 || data.interfaces.p4 || {};
+            // Sum traffic for display
+            const sum = (o) => Object.values(o || {}).reduce((a,v)=>a+(typeof v==='number'?v:0),0);
+            document.getElementById('p2_status').innerText = sum(p2).toFixed(1);
+            document.getElementById('p3_status').innerText = sum(p3).toFixed(1);
+            document.getElementById('p4_status').innerText = sum(p4).toFixed(1);
+        }
+    }
+
+    // Heartbeat update (separate topic)
+    if (data.type === "heartbeat") {
+        const ts = new Date().toLocaleTimeString();
+        document.getElementById('heartbeat_indicator').innerText = `⏱ Last HB: ${ts} (${data.status ?? 'OK'})`;
+
+        // 💡 NEW: Update E-STOP status from Heartbeat (safety status)
+        if (data.status === 'E_STOP' || data.status === 'OK') {
+             updateEStopDisplay(data.status === 'E_STOP');
+        }
+    }
+
+    appendLog(JSON.stringify(data));
+};
+</script>
+
+</body>
+</html>

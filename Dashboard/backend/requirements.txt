@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+paho-mqtt
+sqlalchemy
+databases[sqlite]
+python-multipart

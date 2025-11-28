@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Advanced Robot Dashboard</title>
+  <style>
+    body { background: #05070a; color: white; font-family: Arial, sans-serif; padding: 20px; }
+    h1 { text-align: center; color: #7ef7ff; }
+    .container { max-width: 1100px; margin: auto; background: rgba(255,255,255,0.03); padding: 18px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); }
+    .grid { display:grid; grid-template-columns: 1fr 360px; gap:16px; align-items:start; }
+    .card { background: rgba(255,255,255,0.03); padding:12px; border-radius:10px; }
+    .section-title { font-weight:600; margin-bottom:8px; color:#cfeffd; }
+    canvas { background:transparent; border-radius:8px; width:100%; }
+    .small { font-size:12px; color:#eef0f3; }
+    .row { display:flex; gap:12px; }
+    .col-3 { display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; }
+
+    /* * NEW STYLES: Circular Progress Bar and Alignment 
+     */
+    .interface-metrics { 
+        display: flex; 
+        justify-content: space-around; 
+        margin-top: 5px; 
+        margin-bottom: 10px; /* Space between bars and chart */
+        padding: 5px 0;
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .metric-group { 
+        text-align: center; 
+        font-size: 10px; 
+        margin: 0 5px; 
+        flex: 1; /* Distribute space evenly */
+    }
+    .progress-circle { 
+        width: 45px; /* Slightly smaller to fit better */
+        height: 45px; 
+        border-radius: 50%; 
+        /* The conic-gradient creates the progress fill */
+        background: radial-gradient(closest-side, #05070a 79%, transparent 80% 100%), conic-gradient(#56ccf2 0deg, #56ccf2 0deg, #384252 0deg);
+        display: inline-grid;
+        place-items: center;
+        margin-bottom: 3px;
+    }
+    .progress-circle::before {
+        content: attr(data-label);
+        font-size: 11px;
+        font-weight: bold;
+        color: white;
+    }
+    .status-disk { 
+        font-size: 16px; 
+        font-weight: bold; 
+        color: #7ef7ff; 
+        line-height: 45px; /* Aligns text vertically */
+        height: 45px;
+        display: block;
+    }
+    .disk-low { 
+        color: #ff5b5b !important; /* Low disk space alert color */
+    }
+
+    /* 💡 Notification List Styles */
+    #notificationList div {
+        margin-bottom: 5px;
+        padding: 5px;
+        border-left: 3px solid #ff5b5b; /* Default alert color */
+        background: rgba(255, 91, 91, 0.1);
+        font-size: 11px;
+        color: #fcebeb;
+    }
+    #notificationList .info {
+        border-left: 3px solid #00d1b2;
+        background: rgba(0, 209, 178, 0.1);
+    }
+  </style>
+</head>
+<body>
+  <h1>Advanced Robot Dashboard</h1>
+  
+  <div class="container">
+    <div class="grid">
+
+            <div>
+        <div class="card">
+          <div class="section-title">Live Robot Map & Status</div>
+          <canvas id="mapCanvas" width="900" height="300" style="height:300px;"></canvas>
+          <div class="row" style="margin-top:10px;">
+            <div style="flex:1;" class="small">
+              **Connectivity:** <span id="adv_connectivity">--</span><br>
+              **E-STOP:** <span id="adv_estop">--</span><br>
+              Battery: <span id="adv_batt">--%</span><br>
+              Temp: <span id="adv_temp">-- °C</span><br>
+              Voltage: <span id="adv_volt">-- V</span>
+            </div>
+            <div style="width:220px;text-align:right;" class="small">
+              **Sound:** <span id="adv_sound">OFF</span><br>
+              LED: <span id="adv_led">OFF</span>
+            </div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top:12px;">
+          <div class="section-title">Multi-line Telemetry (Battery / Temp / Speed)</div>
+          <canvas id="multiChart" width="900" height="220"></canvas>
+        </div>
+
+        <div class="row" style="margin-top:12px;">
+          <div class="card" style="flex:1;">
+            <div class="section-title">Timeline Events</div>
+            <canvas id="timelineChart" width="400" height="140"></canvas>
+            <div class="small" id="tlText"></div>
+          </div>
+
+          <div class="card" style="width:340px;">
+            <div class="section-title">Heartbeat Signal</div>
+            <canvas id="heartbeatChart" width="320" height="140"></canvas>
+            <div class="small" id="hbText">Last: --</div>
+          </div>
+        </div>
+      </div>
+
+            <div>
+        <div class="card">
+          <div class="section-title">Quick Controls</div>
+          <div class="row">
+            <button onclick="sendCmd({action:'move', direction:'forward'})">⬆ Forward</button>
+            <button onclick="sendCmd({action:'move', direction:'left'})">⬅ Left</button>
+            <button onclick="sendCmd({action:'move', direction:'right'})">➡ Right</button>
+          </div>
+          <div style="margin-top:8px;" class="row">
+            <button onclick="sendCmd({action:'move', direction:'back'})">⬇ Back</button>
+            <button onclick="sendCmd({action:'stop'})">⏹ Stop</button>
+            <button onclick="sendCmd({type:'safety', action:'E_STOP'})" style="background:#ff5b5b">🛑 E-STOP</button>
+          </div>
+        </div>
+
+                <div class="card" style="margin-top:12px; height:180px; overflow:auto;">
+          <div class="section-title">🚨 Critical Notifications (Last 5)</div>
+          <div id="notificationList" class="small">No alerts.</div>
+        </div>
+
+        <div class="card" style="margin-top:12px; height:200px; overflow:auto;">
+          <div class="section-title">Logs</div>
+          <div id="logList" class="small"></div>
+        </div>
+
+
+                <div class="card" style="margin-top:12px;">
+          <div class="section-title">P2 Interface (CANOpen)</div>
+            <div class="interface-metrics">
+                <div class="metric-group">
+                    <div id="p2_cpu" class="progress-circle" data-label="--%"></div>
+                    <span>CPU</span>
+                </div>
+                <div class="metric-group">
+                    <div id="p2_mem" class="progress-circle" data-label="--%"></div>
+                    <span>MEM</span>
+                </div>
+                <div class="metric-group">
+                    <div id="p2_disk" class="status-disk">--%</div>
+                    <span>DISK FREE</span>
+                </div>
+            </div>
+          <canvas id="p2Chart" width="320" height="160"></canvas>
+        </div>
+
+                <div class="card" style="margin-top:12px;">
+          <div class="section-title">P3 Interface (Ethernet)</div>
+            <div class="interface-metrics">
+                <div class="metric-group">
+                    <div id="p3_cpu" class="progress-circle" data-label="--%"></div>
+                    <span>CPU</span>
+                </div>
+                <div class="metric-group">
+                    <div id="p3_mem" class="progress-circle" data-label="--%"></div>
+                    <span>MEM</span>
+                </div>
+                <div class="metric-group">
+                    <div id="p3_disk" class="status-disk">--%</div>
+                    <span>DISK FREE</span>
+                </div>
+            </div>
+          <canvas id="p3Chart" width="320" height="160"></canvas>
+        </div>
+
+                <div class="card" style="margin-top:12px;">
+          <div class="section-title">P4 Interface (Optical)</div>
+            <div class="interface-metrics">
+                <div class="metric-group">
+                    <div id="p4_cpu" class="progress-circle" data-label="--%"></div>
+                    <span>CPU</span>
+                </div>
+                <div class="metric-group">
+                    <div id="p4_mem" class="progress-circle" data-label="--%"></div>
+                    <span>MEM</span>
+                </div>
+                <div class="metric-group">
+                    <div id="p4_disk" class="status-disk">--%</div>
+                    <span>DISK FREE</span>
+                </div>
+            </div>
+          <canvas id="p4Chart" width="320" height="160"></canvas>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js/dist/chart.umd.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.min.js"></script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', (event) => {
+        
+        // --- Core Helpers ---
+        const MAX_POINTS = 60;
+        const DISK_ALERT_THRESHOLD = 20; // Alert if disk space is 20% or lower
+        const CPU_MEMORY_ALERT_THRESHOLD = 90; // Alert if main CPU/Memory usage exceeds 90%
+        
+        function pushTrim(arr, v){ arr.push(v); if(arr.length>MAX_POINTS) arr.shift(); }
+
+        function appendToLog(s){
+          const el = document.getElementById('logList');
+          const t = new Date().toLocaleTimeString();
+          if(el) el.innerHTML = `<div>[${t}] ${s}</div>` + el.innerHTML;
+        }
+
+        // --- Ping Sound Generator (Inbuilt) ---
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playPingSound() {
+            if (!audioContext) return;
+            // 🚨 IMPORTANT: Do not play ping sound for E-STOP or cleared E-STOP
+            // Only play for connectivity/performance degradation alerts.
+            if(document.getElementById('adv_estop').innerText === '🛑 ACTIVE') return; 
+
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            const now = audioContext.currentTime;
+
+            oscillator.type = 'sine'; 
+            oscillator.frequency.setValueAtTime(800, now); 
+            
+            gainNode.gain.setValueAtTime(0, now);
+            gainNode.gain.linearRampToValueAtTime(0.5, now + 0.01);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.start(now);
+            oscillator.stop(now + 0.3); 
+        }
+
+        // 💡 Notification State and Helper
+        const notifications = [];
+        const MAX_NOTIFICATIONS = 5;
+
+        function addNotification(message, level='CRITICAL') {
+            const now = new Date().toLocaleTimeString();
+            const colorClass = level === 'INFO' ? 'info' : '';
+            const messageHtml = `<div class="${colorClass}">[${now}] **${level}**: ${message}</div>`;
+            
+            notifications.unshift(messageHtml);
+            
+            // Keep only the last 5
+            while (notifications.length > MAX_NOTIFICATIONS) {
+                notifications.pop();
+            }
+
+            const listEl = document.getElementById('notificationList');
+            if (listEl) {
+                listEl.innerHTML = notifications.join('');
+            }
+        }
+
+        // 💡 NEW FUNCTION: Circular Progress Bar Update
+        function updateCircleProgress(elementId, value) {
+            const el = document.getElementById(elementId);
+            if (el) {
+                const percent = Math.min(100, Math.max(0, value)); 
+                
+                let color = '#56ccf2'; // Default blue
+                // Change color if high CPU/MEM usage (e.g., above 85%)
+                if (percent > 85) {
+                    color = '#ff5b5b'; // Red for alert
+                }
+
+                // Update the CSS conic-gradient property for the circular fill
+                el.style.background = `radial-gradient(closest-side, #05070a 79%, transparent 80% 100%), conic-gradient(${color} ${percent}%, #384252 ${percent}%)`;
+                
+                // Update the text label
+                el.setAttribute('data-label', `${Math.round(percent)}%`);
+            }
+        }
+
+        // --- Global State ---
+        let lastHeartbeatTime = Date.now();
+        const HEARTBEAT_EXPECTED_S = 5; 
+        let lastPos = null, lastTs = null;
+        let trace = [];
+        let timelineBuckets = [];
+
+        // Track active alerts to avoid spamming notifications/sound
+        const activeDiskAlerts = { p2: false, p3: false, p4: false };
+        // Now tracks a combined CPU/Memory alert state
+        const activeAlerts = { cpu_mem: false }; // Removed 'heartbeat' since we removed latency alert
+
+
+        // --- Chart Initialization (FIXED) ---
+
+        // Multi Telemetry Chart 
+        const multiChart = new Chart(document.getElementById('multiChart').getContext('2d'), {
+          type: 'line',
+          data: { labels: [], datasets: [
+            { label:'Battery', data: [], borderColor:'#56ccf2', tension:0.3, pointRadius:0 },
+            { label:'Temp', data: [], borderColor:'#ff7ab6', tension:0.3, pointRadius:0 },
+            { label:'Speed', data: [], borderColor:'#7ef7ff', tension:0.3, pointRadius:0 }
+          ] },
+          options: { animation:false, scales:{ x:{ display:false } } }
+        });
+
+        // Timeline Chart 
+        const timelineChart = new Chart(document.getElementById('timelineChart').getContext('2d'), {
+          type:'bar', data:{ labels:[], datasets:[{ label:'events', data:[], backgroundColor:'#8be5ff' }]}, options:{ animation:false, scales:{ x:{ display:false } } }
+        });
+
+        // Heartbeat Chart 
+        const heartbeatChart = new Chart(document.getElementById('heartbeatChart').getContext('2d'), {
+          type:'line', 
+          data:{ 
+            labels:[], 
+            datasets:[{ 
+              // ⚠️ CHANGED LABEL
+              label:'Raw Heartbeat Signal', 
+              data:[], 
+              borderColor:'#ef4444', 
+              tension:0.2, 
+              pointRadius:0 
+            }]
+          }, 
+          options:{ 
+            animation:false, 
+            scales:{ 
+              x:{ display:false }, 
+              y: { 
+                // Removed min/max bounds so chart auto-scales to the raw beat counter
+                title: { display: true, text: 'Raw Beat Value' } 
+              } 
+            } 
+          }
+        });
+
+        // Single Protocol Chart Factory
+        function createSingleProtocolChart(canvasId, protocolName, color) {
+            return new Chart(document.getElementById(canvasId).getContext('2d'), {
+                type: 'line',
+                data: { 
+                    labels: [], 
+                    datasets: [{ 
+                        label: protocolName, 
+                        data: [], 
+                        borderColor: color, 
+                        tension: 0.2, 
+                        pointRadius: 0 
+                    }]
+                },
+                options: { 
+                    animation: false, 
+                    scales: { x: { display: false } },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+        
+        // Assign specific protocols and colors:
+        const p2Chart = createSingleProtocolChart('p2Chart', 'CANOpen', '#7dd3fc'); 
+        const p3Chart = createSingleProtocolChart('p3Chart', 'Ethernet', '#60a5fa'); 
+        const p4Chart = createSingleProtocolChart('p4Chart', 'Optical', '#f97316'); 
+
+
+        // --- Map Drawing Logic (unchanged) ---
+        const mapCanvas = document.getElementById('mapCanvas');
+        const mctx = mapCanvas.getContext('2d');
+        function drawMap(){
+            const w = mapCanvas.width, h = mapCanvas.height;
+            mctx.clearRect(0,0,w,h);
+            mctx.fillStyle = '#021017'; mctx.fillRect(0,0,w,h);
+            mctx.strokeStyle = 'rgba(255,255,255,0.03)'; mctx.lineWidth=1;
+            for(let x=0;x<w;x+=30){ mctx.beginPath(); mctx.moveTo(x,0); mctx.lineTo(x,h); mctx.stroke(); }
+            for(let y=0;y<h;y+=30){ mctx.beginPath(); mctx.moveTo(0,y); mctx.lineTo(w,y); mctx.stroke(); }
+
+            if(trace.length){
+              mctx.beginPath();
+              for(let i=0;i<trace.length;i++){
+                const p = trace[i];
+                const cx = w/2 + p.x*10;
+                const cy = h/2 - p.y*10;
+                if(i===0) mctx.moveTo(cx,cy); else mctx.lineTo(cx,cy);
+              }
+              mctx.strokeStyle = '#56ccf2';
+              mctx.lineWidth = 2;
+              mctx.stroke();
+
+              const last = trace[trace.length-1];
+              const rx = w/2 + last.x*10;
+              const ry = h/2 - last.y*10;
+              mctx.beginPath();
+              mctx.arc(rx,ry,8,0,Math.PI*2);
+              mctx.fillStyle = last.led ? '#ffd166' : '#56ccf2';
+              mctx.fill();
+            }
+        }
+
+        // --- Command Sender (unchanged) ---
+        function sendCmd(cmd) {
+            cmd.robot_id = "robot-alpha"; 
+            fetch('/api/command', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(cmd)
+            }).then(response => {
+                if (!response.ok) {
+                    console.error("Command failed", response);
+                }
+            });
+        }
+
+        // --- WebSocket Connection ---
+        const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+        const ws = new WebSocket(proto + '://' + location.host + '/ws/telemetry');
+
+        ws.onopen = ()=> appendToLog('WS connected');
+        ws.onclose = ()=> appendToLog('WS closed');
+
+        ws.onmessage = (ev) => {
+          let data;
+          try{ data = JSON.parse(ev.data); } catch(e){ data = { raw: ev.data }; }
+          const payload = data.type ? data : (data.payload ? data.payload : data);
+          const nowLabel = new Date().toLocaleTimeString();
+          
+          const estopEl = document.getElementById('adv_estop');
+          const connEl = document.getElementById('adv_connectivity');
+          const soundEl = document.getElementById('adv_sound');
+          
+          // --- Alerts and Status Updates ---
+          
+          // Watchdog Offline - PING HERE
+          if(payload.type === 'watchdog'){
+              if (payload.status === 'OFFLINE' && connEl) {
+                  connEl.innerText = '🚨 OFFLINE';
+                  connEl.style.color = '#ff5b5b'; 
+                  playPingSound(); 
+                  addNotification('Watchdog connection lost.', 'CRITICAL'); 
+                  appendToLog(`🚨 CRITICAL WATCHDOG: ${payload.message}`);
+              }
+          }
+
+          // Connectivity/E-STOP from Heartbeat
+          if(payload.type === 'heartbeat' || payload.type === 'telemetry'){
+              if(connEl && payload.type !== 'watchdog') {
+                  connEl.innerText = '✅ ONLINE';
+                  connEl.style.color = 'limegreen';
+              }
+          } 
+          
+          if(payload.type === 'heartbeat'){
+            const status = payload.status || 'OK';
+            // Ensure cpu/mem are numbers, default to 0
+            const cpu = parseFloat(payload.cpu_percent) ?? 0;
+            const mem = parseFloat(payload.mem_percent) ?? 0;
+
+            // 💡 NEW: Extract raw beat value (for wave) and current latency (for text display)
+            const rawBeat = parseFloat(payload.raw_beat) ?? 0;
+            const now = Date.now();
+            const latency_s = (now - lastHeartbeatTime) / 1000; 
+            lastHeartbeatTime = now;
+            
+            // --- E-STOP Logic (Notification only, NO PING) ---
+            if(estopEl){
+              if(status === 'E_STOP'){
+                  if(estopEl.innerText !== '🛑 ACTIVE') {
+                      addNotification('Emergency STOP activated!', 'CRITICAL'); 
+                  }
+                  estopEl.innerText = '🛑 ACTIVE';
+                  estopEl.style.color = '#ff5b5b'; 
+              } else {
+                  if(estopEl.innerText === '🛑 ACTIVE'){
+                    addNotification('E-STOP cleared.', 'INFO'); 
+                  }
+                  estopEl.innerText = '✅ CLEAR';
+                  estopEl.style.color = 'limegreen'; 
+              }
+            }
+            
+            // ⚠️ MODIFIED CHART UPDATE: Plotting Raw Beat
+            pushTrim(heartbeatChart.data.labels, nowLabel);
+            pushTrim(heartbeatChart.data.datasets[0].data, rawBeat); // <<-- NOW PLOTTING RAW BEAT
+            heartbeatChart.update();
+            
+            const hbTextEl = document.getElementById('hbText');
+            // Keep latency visible in the text label
+            if(hbTextEl) hbTextEl.innerText = `Last: ${nowLabel} (Latency: ${latency_s.toFixed(2)}s)`; 
+
+            // ⚠️ MODIFIED LOGIC: Unified Main CPU/Memory Alert
+            const isHighLoad = cpu >= CPU_MEMORY_ALERT_THRESHOLD || mem >= CPU_MEMORY_ALERT_THRESHOLD;
+            
+            if (isHighLoad) {
+                if (!activeAlerts.cpu_mem) { // 🚨 ONLY SEND ALERT IF WE ARE CROSSING THE THRESHOLD
+                    playPingSound();
+                    activeAlerts.cpu_mem = true; 
+                    addNotification(`High System Load (CPU: ${cpu.toFixed(1)}% / MEM: ${mem.toFixed(1)}%)`, 'CRITICAL');
+                }
+            } else if (!isHighLoad && activeAlerts.cpu_mem) {
+                // Clear the combined alert state if neither is high anymore
+                activeAlerts.cpu_mem = false;
+            }
+            
+            appendToLog('Heartbeat: ' + JSON.stringify({ cpu: cpu.toFixed(1), mem: mem.toFixed(1), status: payload.status }));
+          }
+
+          // LED & SOUND
+          if(payload.led !== undefined) {
+            const ledText = payload.led ? 'ON' : 'OFF';
+            const ledEl = document.getElementById('adv_led');
+            if(ledEl) {
+              ledEl.innerText = ledText;
+              ledEl.style.color = payload.led ? 'yellow' : 'white';
+            }
+          }
+          
+          if(payload.sound_playing !== undefined && soundEl) {
+            const soundText = payload.sound_playing ? 'PLAYING' : 'OFF';
+            soundEl.innerText = soundText;
+            soundEl.style.color = payload.sound_playing ? '#7ef7ff' : 'white';
+          }
+
+          // Simple Telemetry Fields
+          if(payload.battery_pct !== undefined) { const el = document.getElementById('adv_batt'); if(el) el.innerText = payload.battery_pct + '%'; }
+          if(payload.temperature_c !== undefined) { const el = document.getElementById('adv_temp'); if(el) el.innerText = payload.temperature_c + ' °C'; }
+          if(payload.voltage_v !== undefined) { const el = document.getElementById('adv_volt'); if(el) el.innerText = payload.voltage_v + ' V'; }
+          
+          
+          // ----------------------------------------------------
+          // 💡 CPU/Memory/Disk Status & Alerts (P2, P3, P4)
+          // ----------------------------------------------------
+          if(payload.interface_status){
+            const istatus = payload.interface_status;
+            
+            // Helper function to handle disk logic and ping 
+            function handleDiskStatus(port, diskId, diskFreeValue) {
+                const el = document.getElementById(diskId);
+                if (!el) return;
+
+                const freeValue = parseFloat(diskFreeValue) ?? 0;
+
+                el.innerText = `${freeValue.toFixed(0)}%`;
+                
+                // Check for <= 20% disk free
+                const isLow = freeValue <= DISK_ALERT_THRESHOLD;
+                const wasLow = activeDiskAlerts[port];
+                
+                // 🚨 REMOVED/MODIFIED ALERT DEBOUNCE LOGIC FOR DISK
+                // The issue you are seeing is because the Python agent keeps sending
+                // low values, and the browser keeps alerting. 
+                // We keep the debounce logic to prevent alert spam, but ensure the status is correctly reflected.
+                
+                if (isLow) {
+                    el.classList.add('disk-low');
+                    if (!wasLow) {
+                        playPingSound(); 
+                        addNotification(`${port.toUpperCase()} Disk Free: ${freeValue.toFixed(1)}% (Low)`, 'CRITICAL'); 
+                        activeDiskAlerts[port] = true;
+                    }
+                } else {
+                    el.classList.remove('disk-low');
+                    activeDiskAlerts[port] = false;
+                }
+            }
+
+            // P2 Status
+            updateCircleProgress('p2_cpu', istatus.p2_cpu_percent ?? 0);
+            updateCircleProgress('p2_mem', istatus.p2_mem_percent ?? 0);
+            handleDiskStatus('p2', 'p2_disk', istatus.p2_disk_free ?? 0);
+
+            // P3 Status
+            updateCircleProgress('p3_cpu', istatus.p3_cpu_percent ?? 0);
+            updateCircleProgress('p3_mem', istatus.p3_mem_percent ?? 0);
+            handleDiskStatus('p3', 'p3_disk', istatus.p3_disk_free ?? 0);
+            
+            // P4 Status
+            updateCircleProgress('p4_cpu', istatus.p4_cpu_percent ?? 0);
+            updateCircleProgress('p4_mem', istatus.p4_mem_percent ?? 0);
+            handleDiskStatus('p4', 'p4_disk', istatus.p4_disk_free ?? 0);
+          }
+          // ----------------------------------------------------
+          
+          // --- Map and Multi Telemetry Updates ---
+          const battery = payload.battery_pct ?? null;
+          const temp = payload.temperature_c ?? null;
+          let speed = 0;
+          const pos = payload.position ?? null;
+          if(pos && typeof pos.x === 'number'){
+            
+            trace.push({ x: pos.x, y: pos.y, led: !!payload.led }); 
+            if(trace.length>300) trace.shift();
+            drawMap();
+            
+            const ts = Date.now();
+            if(lastPos){
+              const dx = pos.x - lastPos.x, dy = pos.y - lastPos.y, dt = (ts - lastTs)/1000;
+              if(dt>0) speed = Math.sqrt(dx*dx + dy*dy) / dt;
+            }
+            lastPos = pos; lastTs = Date.now();
+          }
+
+          // Multi chart updates
+          if(battery !== null){ pushTrim(multiChart.data.labels, nowLabel); pushTrim(multiChart.data.datasets[0].data, battery); }
+          if(temp !== null) pushTrim(multiChart.data.datasets[1].data, temp);
+          pushTrim(multiChart.data.datasets[2].data, speed);
+          while(multiChart.data.labels.length > MAX_POINTS) multiChart.data.labels.shift();
+          multiChart.update();
+          
+          // Timeline chart updates
+          const evType = payload.type ?? 'unknown';
+          timelineBuckets.push({ t: nowLabel, type: evType }); if(timelineBuckets.length>MAX_POINTS) timelineBuckets.shift();
+          const labels = timelineBuckets.map(b=>b.t);
+          const counts = timelineBuckets.map((_,i)=> timelineBuckets.slice(Math.max(0,i-5),i+1).length);
+          timelineChart.data.labels = labels;
+          timelineChart.data.datasets[0].data = counts;
+          timelineChart.update();
+          
+          
+          // --- Single Interface Chart Updates (Protocol Traffic) ---
+          if(payload.interfaces){
+            const ifs = payload.interfaces;
+            const p2 = ifs.P2 || ifs.p2 || {};
+            const p3 = ifs.P3 || ifs.p3 || {};
+            const p4 = ifs.P4 || ifs.p4 || {};
+
+            const now = nowLabel;
+            const n = (x)=> (typeof x === 'number' ? x : (parseFloat(x) || 0));
+
+            // P2 -> CANOpen
+            pushTrim(p2Chart.data.labels, now);
+            pushTrim(p2Chart.data.datasets[0].data, n(p2.canopen));
+            while(p2Chart.data.labels.length > MAX_POINTS) p2Chart.data.labels.shift();
+            p2Chart.update();
+
+            // P3 -> Ethernet
+            pushTrim(p3Chart.data.labels, now);
+            pushTrim(p3Chart.data.datasets[0].data, n(p3.ethernet));
+            while(p3Chart.data.labels.length > MAX_POINTS) p3Chart.data.labels.shift();
+            p3Chart.update();
+            
+            // P4 -> Optical
+            pushTrim(p4Chart.data.labels, now);
+            pushTrim(p4Chart.data.datasets[0].data, n(p4.optical));
+            while(p4Chart.data.labels.length > MAX_POINTS) p4Chart.data.labels.shift();
+            p4Chart.update();
+
+            // Clean up old data points for single line charts
+            [p2Chart, p3Chart, p4Chart].forEach(c => {
+              c.data.datasets.forEach(ds => { while(ds.data.length > MAX_POINTS) ds.data.shift(); });
+            });
+          }
+          
+          // log only non-frequent event types
+          if (payload.type !== 'telemetry' && payload.type !== 'heartbeat' && payload.type !== 'watchdog') {
+              appendToLog(JSON.stringify({ t: nowLabel, type: payload.type ?? 'telemetry' }));
+          }
+        };
+        
+    }); // End of DOMContentLoaded
+  </script>
+</body>
+</html>
