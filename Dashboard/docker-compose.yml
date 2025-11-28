@@ -1,0 +1,39 @@
+version: '3.8'
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+    restart: unless-stopped
+
+  backend:
+    volumes:
+    - ./dashboard/static:/app/static
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      - MQTT_BROKER_HOST=mosquitto
+    depends_on:
+      - mosquitto
+
+  dashboard:
+    build: ./dashboard
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+  robot_agent:
+    build: ./robot_agent
+    environment:
+      - MQTT_BROKER_HOST=mosquitto
+      - ROBOT_ID=robot-alpha
+    depends_on:
+      - mosquitto
+    restart: unless-stopped
+
