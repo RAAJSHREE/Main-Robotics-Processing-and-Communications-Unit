@@ -5,7 +5,7 @@ This project implements an integrated monitoring and communication architecture 
 The system includes multiple communication interfaces (CANOpen, Ethernet, LVDS/Optical) and ensures safe, reliable operation through sensor health checks, watchdogs, and heartbeat mechanisms.
 
 **System Architecture**
-Refer architecture_diagram_final.drawio.png
+Refer architecture_diagram_final.png
 https://github.com/RAAJSHREE/Main-Robotics-Processing-and-Communications-Unit/blob/main/architecture_diagram_final.png
 
 
