@@ -87,22 +87,22 @@
           <canvas id="mapCanvas" width="900" height="300" style="height:300px;"></canvas>
           <div class="row" style="margin-top:10px;">
             <div style="flex:1;" class="small">
-              **Connectivity:** <span id="adv_connectivity">--</span><br>
+              **System State:** <span id="adv_system_state">INITIALIZING</span><br>
               **E-STOP:** <span id="adv_estop">--</span><br>
-              Battery: <span id="adv_batt">--%</span><br>
-              Temp: <span id="adv_temp">-- °C</span><br>
-              Voltage: <span id="adv_volt">-- V</span>
+              **P2 Driver:** <span id="p2_status">--</span><br>
+              **P3 Driver:** <span id="p3_status">--</span><br>
+              **P4 Driver:** <span id="p4_status">--</span>
             </div>
             <div style="width:220px;text-align:right;" class="small">
-              **Sound:** <span id="adv_sound">OFF</span><br>
-              LED: <span id="adv_led">OFF</span>
+              **Last Update:** <span id="adv_last_update">--</span><br>
+              <span id="adv_connectivity">OFFLINE</span>
             </div>
             </div>
         </div>
 
         <div class="card" style="margin-top:12px;">
-          <div class="section-title">Multi-line Telemetry (Battery / Temp / Speed)</div>
-          <canvas id="multiChart" width="900" height="220"></canvas>
+          <div class="section-title">System Activity Log</div>
+          <div id="systemActivityLog" style="height:220px;overflow-y:auto;font-size:11px;" class="small"></div>
         </div>
 
         <div class="row" style="margin-top:12px;">
@@ -147,59 +147,29 @@
 
 
                 <div class="card" style="margin-top:12px;">
-          <div class="section-title">P2 Interface (CANOpen)</div>
-            <div class="interface-metrics">
-                <div class="metric-group">
-                    <div id="p2_cpu" class="progress-circle" data-label="--%"></div>
-                    <span>CPU</span>
-                </div>
-                <div class="metric-group">
-                    <div id="p2_mem" class="progress-circle" data-label="--%"></div>
-                    <span>MEM</span>
-                </div>
-                <div class="metric-group">
-                    <div id="p2_disk" class="status-disk">--%</div>
-                    <span>DISK FREE</span>
-                </div>
-            </div>
+          <div class="section-title">P2 Driver (Cameras/LiDAR)</div>
+          <div class="small" style="padding:10px;">
+            Status: <span id="p2_driver_status">--</span><br>
+            Last Heartbeat: <span id="p2_last_hb">--</span>
+          </div>
           <canvas id="p2Chart" width="320" height="160"></canvas>
         </div>
 
                 <div class="card" style="margin-top:12px;">
-          <div class="section-title">P3 Interface (Ethernet)</div>
-            <div class="interface-metrics">
-                <div class="metric-group">
-                    <div id="p3_cpu" class="progress-circle" data-label="--%"></div>
-                    <span>CPU</span>
-                </div>
-                <div class="metric-group">
-                    <div id="p3_mem" class="progress-circle" data-label="--%"></div>
-                    <span>MEM</span>
-                </div>
-                <div class="metric-group">
-                    <div id="p3_disk" class="status-disk">--%</div>
-                    <span>DISK FREE</span>
-                </div>
-            </div>
+          <div class="section-title">P3 Driver (Motors)</div>
+          <div class="small" style="padding:10px;">
+            Status: <span id="p3_driver_status">--</span><br>
+            Last Heartbeat: <span id="p3_last_hb">--</span>
+          </div>
           <canvas id="p3Chart" width="320" height="160"></canvas>
         </div>
 
                 <div class="card" style="margin-top:12px;">
-          <div class="section-title">P4 Interface (Optical)</div>
-            <div class="interface-metrics">
-                <div class="metric-group">
-                    <div id="p4_cpu" class="progress-circle" data-label="--%"></div>
-                    <span>CPU</span>
-                </div>
-                <div class="metric-group">
-                    <div id="p4_mem" class="progress-circle" data-label="--%"></div>
-                    <span>MEM</span>
-                </div>
-                <div class="metric-group">
-                    <div id="p4_disk" class="status-disk">--%</div>
-                    <span>DISK FREE</span>
-                </div>
-            </div>
+          <div class="section-title">P4 Driver (LEDs/Gripper)</div>
+          <div class="small" style="padding:10px;">
+            Status: <span id="p4_driver_status">--</span><br>
+            Last Heartbeat: <span id="p4_last_hb">--</span>
+          </div>
           <canvas id="p4Chart" width="320" height="160"></canvas>
         </div>
 
@@ -308,18 +278,7 @@
         const activeAlerts = { cpu_mem: false }; // Removed 'heartbeat' since we removed latency alert
 
 
-        // --- Chart Initialization (FIXED) ---
-
-        // Multi Telemetry Chart 
-        const multiChart = new Chart(document.getElementById('multiChart').getContext('2d'), {
-          type: 'line',
-          data: { labels: [], datasets: [
-            { label:'Battery', data: [], borderColor:'#56ccf2', tension:0.3, pointRadius:0 },
-            { label:'Temp', data: [], borderColor:'#ff7ab6', tension:0.3, pointRadius:0 },
-            { label:'Speed', data: [], borderColor:'#7ef7ff', tension:0.3, pointRadius:0 }
-          ] },
-          options: { animation:false, scales:{ x:{ display:false } } }
-        });
+        // --- Chart Initialization ---
 
         // Timeline Chart 
         const timelineChart = new Chart(document.getElementById('timelineChart').getContext('2d'), {
@@ -454,6 +413,8 @@
                   playPingSound(); 
                   addNotification('Watchdog connection lost.', 'CRITICAL'); 
                   appendToLog(`🚨 CRITICAL WATCHDOG: ${payload.message}`);
+                  const sysStateEl = document.getElementById('adv_system_state');
+                  if(sysStateEl) { sysStateEl.innerText = 'OFFLINE'; sysStateEl.style.color = '#ff5b5b'; }
               }
           }
 
@@ -463,19 +424,41 @@
                   connEl.innerText = '✅ ONLINE';
                   connEl.style.color = 'limegreen';
               }
+              const lastUpdateEl = document.getElementById('adv_last_update');
+              if(lastUpdateEl) lastUpdateEl.innerText = nowLabel;
           } 
           
           if(payload.type === 'heartbeat'){
             const status = payload.status || 'OK';
-            // Ensure cpu/mem are numbers, default to 0
-            const cpu = parseFloat(payload.cpu_percent) ?? 0;
-            const mem = parseFloat(payload.mem_percent) ?? 0;
-
-            // 💡 NEW: Extract raw beat value (for wave) and current latency (for text display)
+            const nodeName = payload.node_name || '';
             const rawBeat = parseFloat(payload.raw_beat) ?? 0;
             const now = Date.now();
             const latency_s = (now - lastHeartbeatTime) / 1000; 
             lastHeartbeatTime = now;
+            
+            // Update driver status based on node_name
+            if(nodeName.includes('p2')){
+              const el = document.getElementById('p2_status');
+              const hbEl = document.getElementById('p2_last_hb');
+              const statusEl = document.getElementById('p2_driver_status');
+              if(el) { el.innerText = status === 'E_STOP' ? '🛑 E-STOP' : '✅ OK'; el.style.color = status === 'E_STOP' ? '#ff5b5b' : 'limegreen'; }
+              if(hbEl) hbEl.innerText = nowLabel;
+              if(statusEl) { statusEl.innerText = status === 'E_STOP' ? '🛑 E-STOP' : '✅ OK'; statusEl.style.color = status === 'E_STOP' ? '#ff5b5b' : 'limegreen'; }
+            } else if(nodeName.includes('p3')){
+              const el = document.getElementById('p3_status');
+              const hbEl = document.getElementById('p3_last_hb');
+              const statusEl = document.getElementById('p3_driver_status');
+              if(el) { el.innerText = status === 'E_STOP' ? '🛑 E-STOP' : '✅ OK'; el.style.color = status === 'E_STOP' ? '#ff5b5b' : 'limegreen'; }
+              if(hbEl) hbEl.innerText = nowLabel;
+              if(statusEl) { statusEl.innerText = status === 'E_STOP' ? '🛑 E-STOP' : '✅ OK'; statusEl.style.color = status === 'E_STOP' ? '#ff5b5b' : 'limegreen'; }
+            } else if(nodeName.includes('p4')){
+              const el = document.getElementById('p4_status');
+              const hbEl = document.getElementById('p4_last_hb');
+              const statusEl = document.getElementById('p4_driver_status');
+              if(el) { el.innerText = status === 'E_STOP' ? '🛑 E-STOP' : '✅ OK'; el.style.color = status === 'E_STOP' ? '#ff5b5b' : 'limegreen'; }
+              if(hbEl) hbEl.innerText = nowLabel;
+              if(statusEl) { statusEl.innerText = status === 'E_STOP' ? '🛑 E-STOP' : '✅ OK'; statusEl.style.color = status === 'E_STOP' ? '#ff5b5b' : 'limegreen'; }
+            }
             
             // --- E-STOP Logic (Notification only, NO PING) ---
             if(estopEl){
@@ -484,143 +467,49 @@
                       addNotification('Emergency STOP activated!', 'CRITICAL'); 
                   }
                   estopEl.innerText = '🛑 ACTIVE';
-                  estopEl.style.color = '#ff5b5b'; 
+                  estopEl.style.color = '#ff5b5b';
+                  const sysStateEl = document.getElementById('adv_system_state');
+                  if(sysStateEl) { sysStateEl.innerText = 'E-STOP ACTIVE'; sysStateEl.style.color = '#ff5b5b'; }
               } else {
                   if(estopEl.innerText === '🛑 ACTIVE'){
                     addNotification('E-STOP cleared.', 'INFO'); 
                   }
                   estopEl.innerText = '✅ CLEAR';
-                  estopEl.style.color = 'limegreen'; 
+                  estopEl.style.color = 'limegreen';
+                  const sysStateEl = document.getElementById('adv_system_state');
+                  if(sysStateEl) { sysStateEl.innerText = 'OPERATIONAL'; sysStateEl.style.color = 'limegreen'; }
               }
             }
             
-            // ⚠️ MODIFIED CHART UPDATE: Plotting Raw Beat
+            // Update heartbeat chart
             pushTrim(heartbeatChart.data.labels, nowLabel);
-            pushTrim(heartbeatChart.data.datasets[0].data, rawBeat); // <<-- NOW PLOTTING RAW BEAT
+            pushTrim(heartbeatChart.data.datasets[0].data, rawBeat);
             heartbeatChart.update();
             
             const hbTextEl = document.getElementById('hbText');
-            // Keep latency visible in the text label
-            if(hbTextEl) hbTextEl.innerText = `Last: ${nowLabel} (Latency: ${latency_s.toFixed(2)}s)`; 
-
-            // ⚠️ MODIFIED LOGIC: Unified Main CPU/Memory Alert
-            const isHighLoad = cpu >= CPU_MEMORY_ALERT_THRESHOLD || mem >= CPU_MEMORY_ALERT_THRESHOLD;
+            if(hbTextEl) hbTextEl.innerText = `Last: ${nowLabel} (${nodeName})`;
             
-            if (isHighLoad) {
-                if (!activeAlerts.cpu_mem) { // 🚨 ONLY SEND ALERT IF WE ARE CROSSING THE THRESHOLD
-                    playPingSound();
-                    activeAlerts.cpu_mem = true; 
-                    addNotification(`High System Load (CPU: ${cpu.toFixed(1)}% / MEM: ${mem.toFixed(1)}%)`, 'CRITICAL');
-                }
-            } else if (!isHighLoad && activeAlerts.cpu_mem) {
-                // Clear the combined alert state if neither is high anymore
-                activeAlerts.cpu_mem = false;
-            }
-            
-            appendToLog('Heartbeat: ' + JSON.stringify({ cpu: cpu.toFixed(1), mem: mem.toFixed(1), status: payload.status }));
+            appendToLog(`Heartbeat from ${nodeName}: ${status}`);
           }
 
-          // LED & SOUND
-          if(payload.led !== undefined) {
-            const ledText = payload.led ? 'ON' : 'OFF';
-            const ledEl = document.getElementById('adv_led');
-            if(ledEl) {
-              ledEl.innerText = ledText;
-              ledEl.style.color = payload.led ? 'yellow' : 'white';
+          // Log messages
+          if(payload.type === 'log'){
+            const activityLog = document.getElementById('systemActivityLog');
+            if(activityLog){
+              const logEntry = `<div>[${nowLabel}] ${payload.level || 'INFO'}: ${payload.message || JSON.stringify(payload)}</div>`;
+              activityLog.innerHTML = logEntry + activityLog.innerHTML;
             }
           }
           
-          if(payload.sound_playing !== undefined && soundEl) {
-            const soundText = payload.sound_playing ? 'PLAYING' : 'OFF';
-            soundEl.innerText = soundText;
-            soundEl.style.color = payload.sound_playing ? '#7ef7ff' : 'white';
-          }
-
-          // Simple Telemetry Fields
-          if(payload.battery_pct !== undefined) { const el = document.getElementById('adv_batt'); if(el) el.innerText = payload.battery_pct + '%'; }
-          if(payload.temperature_c !== undefined) { const el = document.getElementById('adv_temp'); if(el) el.innerText = payload.temperature_c + ' °C'; }
-          if(payload.voltage_v !== undefined) { const el = document.getElementById('adv_volt'); if(el) el.innerText = payload.voltage_v + ' V'; }
           
-          
-          // ----------------------------------------------------
-          // 💡 CPU/Memory/Disk Status & Alerts (P2, P3, P4)
-          // ----------------------------------------------------
-          if(payload.interface_status){
-            const istatus = payload.interface_status;
-            
-            // Helper function to handle disk logic and ping 
-            function handleDiskStatus(port, diskId, diskFreeValue) {
-                const el = document.getElementById(diskId);
-                if (!el) return;
-
-                const freeValue = parseFloat(diskFreeValue) ?? 0;
-
-                el.innerText = `${freeValue.toFixed(0)}%`;
-                
-                // Check for <= 20% disk free
-                const isLow = freeValue <= DISK_ALERT_THRESHOLD;
-                const wasLow = activeDiskAlerts[port];
-                
-                // 🚨 REMOVED/MODIFIED ALERT DEBOUNCE LOGIC FOR DISK
-                // The issue you are seeing is because the Python agent keeps sending
-                // low values, and the browser keeps alerting. 
-                // We keep the debounce logic to prevent alert spam, but ensure the status is correctly reflected.
-                
-                if (isLow) {
-                    el.classList.add('disk-low');
-                    if (!wasLow) {
-                        playPingSound(); 
-                        addNotification(`${port.toUpperCase()} Disk Free: ${freeValue.toFixed(1)}% (Low)`, 'CRITICAL'); 
-                        activeDiskAlerts[port] = true;
-                    }
-                } else {
-                    el.classList.remove('disk-low');
-                    activeDiskAlerts[port] = false;
-                }
-            }
-
-            // P2 Status
-            updateCircleProgress('p2_cpu', istatus.p2_cpu_percent ?? 0);
-            updateCircleProgress('p2_mem', istatus.p2_mem_percent ?? 0);
-            handleDiskStatus('p2', 'p2_disk', istatus.p2_disk_free ?? 0);
-
-            // P3 Status
-            updateCircleProgress('p3_cpu', istatus.p3_cpu_percent ?? 0);
-            updateCircleProgress('p3_mem', istatus.p3_mem_percent ?? 0);
-            handleDiskStatus('p3', 'p3_disk', istatus.p3_disk_free ?? 0);
-            
-            // P4 Status
-            updateCircleProgress('p4_cpu', istatus.p4_cpu_percent ?? 0);
-            updateCircleProgress('p4_mem', istatus.p4_mem_percent ?? 0);
-            handleDiskStatus('p4', 'p4_disk', istatus.p4_disk_free ?? 0);
-          }
-          // ----------------------------------------------------
-          
-          // --- Map and Multi Telemetry Updates ---
-          const battery = payload.battery_pct ?? null;
-          const temp = payload.temperature_c ?? null;
-          let speed = 0;
+          // --- Map Updates (if position data exists) ---
           const pos = payload.position ?? null;
           if(pos && typeof pos.x === 'number'){
-            
-            trace.push({ x: pos.x, y: pos.y, led: !!payload.led }); 
+            trace.push({ x: pos.x, y: pos.y, led: false }); 
             if(trace.length>300) trace.shift();
             drawMap();
-            
-            const ts = Date.now();
-            if(lastPos){
-              const dx = pos.x - lastPos.x, dy = pos.y - lastPos.y, dt = (ts - lastTs)/1000;
-              if(dt>0) speed = Math.sqrt(dx*dx + dy*dy) / dt;
-            }
             lastPos = pos; lastTs = Date.now();
           }
-
-          // Multi chart updates
-          if(battery !== null){ pushTrim(multiChart.data.labels, nowLabel); pushTrim(multiChart.data.datasets[0].data, battery); }
-          if(temp !== null) pushTrim(multiChart.data.datasets[1].data, temp);
-          pushTrim(multiChart.data.datasets[2].data, speed);
-          while(multiChart.data.labels.length > MAX_POINTS) multiChart.data.labels.shift();
-          multiChart.update();
           
           // Timeline chart updates
           const evType = payload.type ?? 'unknown';
@@ -632,38 +521,30 @@
           timelineChart.update();
           
           
-          // --- Single Interface Chart Updates (Protocol Traffic) ---
-          if(payload.interfaces){
-            const ifs = payload.interfaces;
-            const p2 = ifs.P2 || ifs.p2 || {};
-            const p3 = ifs.P3 || ifs.p3 || {};
-            const p4 = ifs.P4 || ifs.p4 || {};
-
+          // --- Driver Heartbeat Charts (count heartbeats over time) ---
+          if(payload.type === 'heartbeat' && payload.node_name){
+            const nodeName = payload.node_name;
             const now = nowLabel;
-            const n = (x)=> (typeof x === 'number' ? x : (parseFloat(x) || 0));
-
-            // P2 -> CANOpen
-            pushTrim(p2Chart.data.labels, now);
-            pushTrim(p2Chart.data.datasets[0].data, n(p2.canopen));
-            while(p2Chart.data.labels.length > MAX_POINTS) p2Chart.data.labels.shift();
-            p2Chart.update();
-
-            // P3 -> Ethernet
-            pushTrim(p3Chart.data.labels, now);
-            pushTrim(p3Chart.data.datasets[0].data, n(p3.ethernet));
-            while(p3Chart.data.labels.length > MAX_POINTS) p3Chart.data.labels.shift();
-            p3Chart.update();
             
-            // P4 -> Optical
-            pushTrim(p4Chart.data.labels, now);
-            pushTrim(p4Chart.data.datasets[0].data, n(p4.optical));
-            while(p4Chart.data.labels.length > MAX_POINTS) p4Chart.data.labels.shift();
-            p4Chart.update();
-
-            // Clean up old data points for single line charts
-            [p2Chart, p3Chart, p4Chart].forEach(c => {
-              c.data.datasets.forEach(ds => { while(ds.data.length > MAX_POINTS) ds.data.shift(); });
-            });
+            if(nodeName.includes('p2')){
+              pushTrim(p2Chart.data.labels, now);
+              pushTrim(p2Chart.data.datasets[0].data, 1);
+              while(p2Chart.data.labels.length > MAX_POINTS) p2Chart.data.labels.shift();
+              while(p2Chart.data.datasets[0].data.length > MAX_POINTS) p2Chart.data.datasets[0].data.shift();
+              p2Chart.update();
+            } else if(nodeName.includes('p3')){
+              pushTrim(p3Chart.data.labels, now);
+              pushTrim(p3Chart.data.datasets[0].data, 1);
+              while(p3Chart.data.labels.length > MAX_POINTS) p3Chart.data.labels.shift();
+              while(p3Chart.data.datasets[0].data.length > MAX_POINTS) p3Chart.data.datasets[0].data.shift();
+              p3Chart.update();
+            } else if(nodeName.includes('p4')){
+              pushTrim(p4Chart.data.labels, now);
+              pushTrim(p4Chart.data.datasets[0].data, 1);
+              while(p4Chart.data.labels.length > MAX_POINTS) p4Chart.data.labels.shift();
+              while(p4Chart.data.datasets[0].data.length > MAX_POINTS) p4Chart.data.datasets[0].data.shift();
+              p4Chart.update();
+            }
           }
           
           // log only non-frequent event types

@@ -81,31 +81,30 @@
     <h1>Robot Dashboard</h1>
 
     <div class="card robot-info">
-        <div class="section-title">Robot Status</div>
-        <p><strong>Robot:</strong> <span id="robot-id">robot-alpha</span></p>
-        <p><strong>Battery:</strong> <span id="battery">--%</span></p>
-        <p><strong>Temperature:</strong> <span id="temperature">-- °C</span></p>
-        <p><strong>Position:</strong> <span id="position">x=0, y=0, θ=0</span></p>
-        <p><strong>LED:</strong> <span id="led-status">OFF</span></p>
+        <div class="section-title">System Status</div>
+        <p><strong>Robot ID:</strong> <span id="robot-id">robot-alpha</span></p>
+        <p><strong>System State:</strong> <span id="system-state">OPERATIONAL</span></p>
         <p><strong>E-STOP:</strong> <span id="estop-status" class="status-estop-clear">CLEAR</span></p>
+        <p><strong>Last Update:</strong> <span id="last-update">--</span></p>
 
+        <div class="section-title" style="margin-top:20px;">Hardware Drivers</div>
         <div class="iface-row">
             <div class="iface">
-                <div class="small-note">P2 (sum)</div>
-                <strong id="p2_status">--</strong>
+                <div class="small-note">P2 Camera/LiDAR</div>
+                <strong id="p2_status">READY</strong>
             </div>
             <div class="iface">
-                <div class="small-note">P3 (sum)</div>
-                <strong id="p3_status">--</strong>
+                <div class="small-note">P3 Motors</div>
+                <strong id="p3_status">READY</strong>
             </div>
             <div class="iface">
-                <div class="small-note">P4 (sum)</div>
-                <strong id="p4_status">--</strong>
+                <div class="small-note">P4 Actuators</div>
+                <strong id="p4_status">READY</strong>
             </div>
         </div>
 
-        <div style="margin-top:12px;">
-            <span class="heartbeat" id="heartbeat_indicator">⏱ Last HB: --</span>
+        <div style="margin-top:15px;">
+            <span class="heartbeat" id="heartbeat_indicator">⏱ Waiting for heartbeat...</span>
         </div>
     </div>
 
@@ -133,18 +132,20 @@
     </div>
 
 </div>
-
 <script>
 const robotId = document.getElementById("robot-id").innerText;
 const logsEl = document.getElementById("logs");
-const estopStatusEl = document.getElementById("estop-status"); // 💡 Get E-STOP element
+const estopStatusEl = document.getElementById("estop-status");
+
+// 👉 backend host (FastAPI) is on port 8000
+const backendHost = window.location.hostname + ":8000";
+const apiBase = window.location.protocol + "//" + backendHost;
 
 function appendLog(msg) {
     logsEl.textContent += msg + "\n";
     logsEl.scrollTop = logsEl.scrollHeight;
 }
 
-// 💡 NEW/MODIFIED: Helper to update E-STOP status style and text
 function updateEStopDisplay(isActive) {
     if (isActive) {
         estopStatusEl.innerText = "ACTIVE";
@@ -158,25 +159,23 @@ function updateEStopDisplay(isActive) {
 async function sendCommand(payload) {
     payload.robot_id = robotId;
     try {
-        await fetch("/api/command", {
+        await fetch(`${apiBase}/api/command`, {   // 👈 was "/api/command"
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
         });
-        
-        // 💡 NEW: Instant UI feedback after sending command
+
         if (payload.action === "E_STOP") {
             updateEStopDisplay(true);
         } else if (payload.action === "CLEAR_ESTOP") {
             updateEStopDisplay(false);
         }
-
     } catch (err) {
         console.error("Failed to send command:", err);
+        appendLog("⚠️ Failed to send command: " + err);
     }
 }
 
-// 💡 MODIFIED: Command functions remain the same
 function sendEStop() { sendCommand({ type: "safety", action: "E_STOP" }); }
 function sendClear() { sendCommand({ type: "safety", action: "CLEAR_ESTOP" }); }
 function sendMove(direction) { sendCommand({ action: "move", direction: direction }); }
@@ -185,7 +184,8 @@ function sendLED(state) { sendCommand({ action: `led/${state}` }); }
 
 // --------------- WebSocket ----------------
 let wsProtocol = location.protocol === "https:" ? "wss" : "ws";
-let ws = new WebSocket(`${wsProtocol}://${location.host}/ws/telemetry`);
+// 👇 connect to backend:8000 instead of location.host (8080)
+let ws = new WebSocket(`${wsProtocol}://${backendHost}/ws/telemetry`);
 
 ws.onopen = () => appendLog("🟢 WebSocket connected");
 ws.onclose = () => appendLog("🔴 WebSocket disconnected");
@@ -195,46 +195,106 @@ ws.onmessage = (event) => {
     let data;
     try { data = JSON.parse(event.data); } catch { data = { raw: event.data }; }
 
-    // Telemetry update
-    if (data.type === "telemetry") {
-        document.getElementById("battery").innerText = (data.battery_pct ?? data.battery) + "%";
-        document.getElementById("temperature").innerText = (data.temperature_c ?? data.temperature) + " °C";
-        document.getElementById("position").innerText =
-            `x=${data.position.x}, y=${data.position.y}, θ=${data.position.theta}`;
-        document.getElementById("led-status").innerText = data.led ? "ON" : "OFF";
-        
-        // 💡 NEW: Update E-STOP status from Telemetry (the ultimate source of truth)
-        if (data.estop !== undefined) {
-             updateEStopDisplay(data.estop);
-        }
+    const ts = new Date().toLocaleTimeString();
+    document.getElementById("last-update").innerText = ts;
 
-        // Interfaces (if present)
-        if (data.interfaces) {
-            const p2 = data.interfaces.P2 || data.interfaces.p2 || {};
-            const p3 = data.interfaces.P3 || data.interfaces.p3 || {};
-            const p4 = data.interfaces.P4 || data.interfaces.p4 || {};
-            // Sum traffic for display
-            const sum = (o) => Object.values(o || {}).reduce((a,v)=>a+(typeof v==='number'?v:0),0);
-            document.getElementById('p2_status').innerText = sum(p2).toFixed(1);
-            document.getElementById('p3_status').innerText = sum(p3).toFixed(1);
-            document.getElementById('p4_status').innerText = sum(p4).toFixed(1);
-        }
-    }
-
-    // Heartbeat update (separate topic)
+    // Handle heartbeat messages
     if (data.type === "heartbeat") {
-        const ts = new Date().toLocaleTimeString();
-        document.getElementById('heartbeat_indicator').innerText = `⏱ Last HB: ${ts} (${data.status ?? 'OK'})`;
+        const driverName = data.node_name || "system";
+        const status = data.status || "OK";
+        const isEstop = (status === "E-STOP" || status === "E_STOP");
+        
+        document.getElementById('heartbeat_indicator').innerText = `⏱ ${ts} - ${driverName}: ${status}`;
+        
+        // Update driver-specific status with color coding
+        const displayStatus = isEstop ? "🛑 E-STOP" : "✅ OK";
+        
+        if (driverName.includes("p2")) {
+            const el = document.getElementById('p2_status');
+            el.innerText = displayStatus;
+            el.style.color = isEstop ? "#ff3b3b" : "#16a34a";
+        } else if (driverName.includes("p3")) {
+            const el = document.getElementById('p3_status');
+            el.innerText = displayStatus;
+            el.style.color = isEstop ? "#ff3b3b" : "#16a34a";
+        } else if (driverName.includes("p4")) {
+            const el = document.getElementById('p4_status');
+            el.innerText = displayStatus;
+            el.style.color = isEstop ? "#ff3b3b" : "#16a34a";
+        }
 
-        // 💡 NEW: Update E-STOP status from Heartbeat (safety status)
-        if (data.status === 'E_STOP' || data.status === 'OK') {
-             updateEStopDisplay(data.status === 'E_STOP');
+        // Update system state based on ANY driver reporting E-STOP
+        if (isEstop) {
+            updateEStopDisplay(true);
+            document.getElementById("system-state").innerText = "E-STOP ACTIVE";
+        } else {
+            // Only clear E-STOP if this was an E-STOP clear message
+            // Check if message explicitly says cleared
+            const sysStateEl = document.getElementById("system-state");
+            if (sysStateEl.innerText === "E-STOP ACTIVE" && status === "OK") {
+                // Keep E-STOP active until we get confirmation all drivers cleared
+                // This will be handled by the log message
+            }
         }
     }
 
-    appendLog(JSON.stringify(data));
+    // Handle log messages
+    if (data.type === "log") {
+        const level = data.level || "INFO";
+        const message = data.message || JSON.stringify(data);
+        const source = data.source_node || "system";
+        
+        // Check for E-STOP in log messages
+        if (message.includes("E-STOP ACTIVATED") || message.includes("HARD E-STOP") || message.includes("E_STOP")) {
+            updateEStopDisplay(true);
+            document.getElementById("system-state").innerText = "E-STOP ACTIVE";
+            
+            // Set all drivers to E-STOP state visually
+            ["p2_status", "p3_status", "p4_status"].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.innerText = "🛑 E-STOP";
+                    el.style.color = "#ff3b3b";
+                }
+            });
+        } else if (message.includes("E-STOP cleared") || message.includes("CLEAR_ESTOP")) {
+            updateEStopDisplay(false);
+            document.getElementById("system-state").innerText = "OPERATIONAL";
+            
+            // Reset all drivers to OK state
+            ["p2_status", "p3_status", "p4_status"].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.innerText = "✅ OK";
+                    el.style.color = "#16a34a";
+                }
+            });
+        }
+        
+        appendLog(`[${level}] ${source}: ${message}`);
+    }
+
+    // Handle telemetry (if still being sent)
+    if (data.type === "telemetry") {
+        if (data.estop !== undefined) {
+            updateEStopDisplay(data.estop);
+            document.getElementById("system-state").innerText = data.estop ? "E-STOP ACTIVE" : "OPERATIONAL";
+        }
+    }
+
+    // Handle watchdog alerts
+    if (data.type === "watchdog") {
+        document.getElementById("system-state").innerText = "OFFLINE";
+        appendLog(`⚠️ WATCHDOG: ${data.message}`);
+    }
+
+    // Log raw data for debugging
+    if (data.type !== "heartbeat") {  // Don't spam logs with heartbeats
+        appendLog(JSON.stringify(data));
+    }
 };
 </script>
+
 
 </body>
 </html>

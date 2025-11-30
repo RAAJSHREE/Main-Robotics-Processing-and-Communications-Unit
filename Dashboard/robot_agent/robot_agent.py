@@ -185,11 +185,11 @@ def send_telemetry():
 # Command Handling
 # -------------------------------------------------------
 def handle_robot_command(payload):
-    action = payload.get("action")
+    action = payload.get("action", "").lower()  # Normalize to lowercase for consistency
 
     # Safety: E-STOP
     if payload.get("type") == "safety":
-        if action == "E_STOP":
+        if action == "e_stop":
             robot_state["estop"] = True
             robot_state["moving"] = False
             robot_state["direction"] = None
@@ -201,7 +201,7 @@ def handle_robot_command(payload):
                 "level": "CRITICAL",
                 "message": "Emergency STOP activated"
             })
-        elif action == "CLEAR_ESTOP":
+        elif action == "clear_estop":
             robot_state["estop"] = False
             print("✅ E-STOP cleared")
             publish("log", {
